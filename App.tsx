@@ -209,12 +209,55 @@ function App() {
           try {
               // Decode base64 utf8
               const jsonStr = decodeURIComponent(escape(atob(shareData)));
-              const sharedResult = JSON.parse(jsonStr);
-              setResult(sharedResult.result);
-              if (sharedResult.text) {
-                  setActiveTab(MediaType.TEXT);
-                  setTextInput(sharedResult.text);
+              const data = JSON.parse(jsonStr);
+              
+              // Handle v1 (legacy) and v2 structure
+              const resultData = data.result || data; // v1 might just be the object or wrapped
+              setResult(resultData);
+              
+              // v2 Config Restoration
+              if (data.config) {
+                  setAnalysisPreset(data.config.preset);
+                  setAnalysisFocus(data.config.focus);
+                  setAdvancedConfig(data.config.advanced);
               }
+
+              const mode = data.type || (data.text ? MediaType.TEXT : MediaType.IMAGE); // Inference fallback
+              setActiveTab(mode);
+
+              if (mode === MediaType.TEXT && data.text) {
+                  setTextInput(data.text);
+              } else if (data.meta) {
+                  // Restore Ghost Item for Media
+                   const dummyFile = new File([""], data.meta.name || "Shared File", { type: data.meta.mime || 'application/octet-stream' });
+                   const ghostItem: QueueItem = {
+                      id: 'shared-' + Date.now(),
+                      file: dummyFile,
+                      status: 'done',
+                      progress: 100,
+                      mimeType: data.meta.mime || 'unknown',
+                      base64: undefined,
+                      previewUrl: undefined,
+                      result: resultData
+                   };
+                   setQueue([ghostItem]);
+                   setActiveFileId(ghostItem.id);
+              } else if (data.text === undefined && !data.meta) {
+                   // v1 legacy fallback for image share (no meta)
+                   const dummyFile = new File([""], "Shared Content", { type: 'unknown' });
+                   const ghostItem: QueueItem = {
+                      id: 'shared-legacy-' + Date.now(),
+                      file: dummyFile,
+                      status: 'done',
+                      progress: 100,
+                      mimeType: 'unknown',
+                      previewUrl: undefined,
+                      result: resultData
+                   };
+                   setQueue([ghostItem]);
+                   setActiveFileId(ghostItem.id);
+              }
+
               // Clean URL
               window.history.replaceState({}, '', window.location.pathname);
               addToast('Shared analysis loaded', 'success');
@@ -289,16 +332,28 @@ function App() {
 
   const handleShare = () => {
       if (!result) return;
-      // Encode result
-      const shareObj = {
+      
+      const shareData = {
+          v: 2,
+          type: activeTab,
           result: result,
+          config: {
+              preset: analysisPreset,
+              focus: analysisFocus,
+              advanced: advancedConfig
+          },
           text: activeTab === MediaType.TEXT ? textInput : undefined,
+          meta: activeTab !== MediaType.TEXT && activeItem ? {
+              name: activeItem.file.name,
+              mime: activeItem.mimeType,
+              size: activeItem.file.size
+          } : undefined,
           timestamp: Date.now()
       };
       
       try {
           // Use btoa with utf8 escape fix
-          const jsonStr = JSON.stringify(shareObj);
+          const jsonStr = JSON.stringify(shareData);
           const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
           const url = `${window.location.origin}${window.location.pathname}?share=${base64}`;
           
@@ -1029,17 +1084,19 @@ function App() {
               </button>
               
               <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isConfigOpen ? 'max-h-[2000px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                 <div className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl p-4 md:p-6 shadow-lg shadow-slate-200/50 dark:shadow-none relative">
+                 <div className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl p-4 md:p-6 shadow-lg shadow-slate-200/50 dark:shadow-none relative flex flex-col">
                     
-                    <button 
-                        onClick={handleResetConfig}
-                        className="absolute top-4 right-4 md:top-5 md:right-5 text-[10px] font-semibold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1 transition-colors bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700"
-                        title="Reset configuration to defaults"
-                    >
-                        <RotateCcw className="w-3 h-3" />
-                        <span className="hidden sm:inline">Reset Defaults</span>
-                        <span className="sm:hidden">Reset</span>
-                    </button>
+                    <div className="flex justify-end mb-2">
+                        <button 
+                            onClick={handleResetConfig}
+                            className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1 transition-colors bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700"
+                            title="Reset configuration to defaults"
+                        >
+                            <RotateCcw className="w-3 h-3" />
+                            <span className="hidden sm:inline">Reset Defaults</span>
+                            <span className="sm:hidden">Reset</span>
+                        </button>
+                    </div>
 
                     {/* Pro Tip - GPU */}
                     <div className="mb-6 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-lg p-3 flex items-start gap-3">
@@ -1479,7 +1536,7 @@ function App() {
                                                             />
                                                              <button 
                                                                 onClick={(e) => { e.stopPropagation(); setIsSourceOpen(true); }}
-                                                                className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                                                                className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 z-10 cursor-pointer"
                                                               >
                                                                   <div className="bg-white/90 dark:bg-slate-900/90 text-slate-800 dark:text-white p-3 rounded-full shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
                                                                       <Maximize2 className="w-6 h-6" />
@@ -1888,6 +1945,26 @@ function App() {
                     </div>
                 </div>
             </div>
+            </div>
+        </div>
+      )}
+
+      {/* Image Lightbox Modal */}
+      {isSourceOpen && activeItem?.previewUrl && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 p-4 print:hidden backdrop-blur-md animate-in fade-in duration-200" onClick={() => setIsSourceOpen(false)}>
+            <div className="relative w-full h-full flex items-center justify-center">
+                <img 
+                    src={activeItem.previewUrl} 
+                    alt="Full Source" 
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-300"
+                    onClick={(e) => e.stopPropagation()} 
+                />
+                <button 
+                    onClick={() => setIsSourceOpen(false)}
+                    className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white p-3 rounded-full transition-all backdrop-blur-sm border border-white/10 pointer-events-auto"
+                >
+                    <X className="w-6 h-6" />
+                </button>
             </div>
         </div>
       )}
