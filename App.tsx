@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Upload, FileType, Image as ImageIcon, Mic, Video, CheckCircle2, AlertTriangle, HelpCircle, Loader2, History as HistoryIcon, Activity, X, FileText, Trash2, Plus, Layers, Settings, Shield, User, PenTool, Layout, ScanFace, Sliders, Info, Sun, Moon, ChevronDown, ChevronUp, RotateCcw, Download, FileJson, Printer, Copy, Check, Link as LinkIcon, ExternalLink, Zap, FastForward, Eye, Maximize2, Play, Pause, FileBox } from 'lucide-react';
+import { Upload, FileType, Image as ImageIcon, Mic, Video, CheckCircle2, AlertTriangle, HelpCircle, Loader2, History as HistoryIcon, Activity, X, FileText, Trash2, Plus, Layers, Settings, Shield, User, PenTool, Layout, ScanFace, Sliders, Info, Sun, Moon, ChevronDown, ChevronUp, RotateCcw, Download, FileJson, Printer, Copy, Check, Link as LinkIcon, ExternalLink, Zap, FastForward, Eye, Maximize2, Play, Pause, FileBox, Monitor } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { MediaType, AnalysisResult, QueueItem, HistoryItem, AnalysisPreset, AnalysisFocus, AdvancedConfig, KeyFeature } from './types';
 import { detectAIContent } from './services/geminiService';
@@ -7,6 +7,7 @@ import AnalysisChart from './components/AnalysisChart';
 import ChatWidget from './components/ChatWidget';
 import HistoryDrawer from './components/HistoryDrawer';
 import InfoTooltip from './components/InfoTooltip';
+import PdfPreview from './components/PdfPreview';
 
 // Support up to 100MB videos via progressive frame sampling
 const MAX_FILE_SIZE = 100 * 1024 * 1024; 
@@ -37,6 +38,24 @@ const FILE_CONFIG: Record<string, { mime: string[]; label: string }> = {
     ],
     label: 'MP4, WEBM, MOV, AVI, MKV, WMV'
   }
+};
+
+// --- Helper: Robust MIME Type Detection for Mobile ---
+const getMimeType = (file: File): string => {
+  // If browser provides a valid type, use it
+  if (file.type && file.type !== '') return file.type;
+
+  // Fallback: Infer from extension
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  if (!ext) return 'application/octet-stream';
+
+  const mimeMap: Record<string, string> = {
+    'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'webp': 'image/webp', 'heic': 'image/heic', 'heif': 'image/heif', 'pdf': 'application/pdf',
+    'mp3': 'audio/mp3', 'wav': 'audio/wav', 'aac': 'audio/aac', 'flac': 'audio/flac', 'ogg': 'audio/ogg', 'm4a': 'audio/x-m4a',
+    'mp4': 'video/mp4', 'mov': 'video/quicktime', 'avi': 'video/x-msvideo', 'webm': 'video/webm', 'mkv': 'video/x-matroska'
+  };
+
+  return mimeMap[ext] || 'application/octet-stream';
 };
 
 // --- Toast Component ---
@@ -101,13 +120,12 @@ function App() {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   
   // Theme State
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('theme');
-      if (saved === 'dark' || saved === 'light') return saved;
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+      if (saved === 'dark' || saved === 'light' || saved === 'system') return saved as any;
     }
-    return 'light';
+    return 'system';
   });
 
   // Queue State
@@ -193,12 +211,28 @@ function App() {
   // Apply Theme Side Effects
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const applyTheme = (t: 'light' | 'dark' | 'system') => {
+      const isDark = t === 'dark' || (t === 'system' && mediaQuery.matches);
+      if (isDark) {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+    };
+
+    applyTheme(theme);
     localStorage.setItem('theme', theme);
+
+    const handleSystemChange = () => {
+      if (theme === 'system') {
+        applyTheme('system');
+      }
+    };
+
+    mediaQuery.addEventListener('change', handleSystemChange);
+    return () => mediaQuery.removeEventListener('change', handleSystemChange);
   }, [theme]);
 
   // Handle Share Param on Load
@@ -285,8 +319,12 @@ function App() {
       }
   }, []);
 
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  const cycleTheme = () => {
+    setTheme(prev => {
+        if (prev === 'light') return 'dark';
+        if (prev === 'dark') return 'system';
+        return 'light';
+    });
   };
 
   // Handle Preset Change acting as a Macro for Advanced Settings
@@ -350,53 +388,78 @@ function App() {
   const handleShare = () => {
       if (!result) return;
       
-      // Helper to create share payload
-      const createPayload = (includeContent: boolean) => ({
-          v: 2,
-          type: activeTab,
-          result: result,
-          config: {
-              preset: analysisPreset,
-              focus: analysisFocus,
-              advanced: advancedConfig
-          },
-          text: activeTab === MediaType.TEXT ? textInput : undefined,
-          meta: activeTab !== MediaType.TEXT && activeItem ? {
-              name: activeItem.file.name,
-              mime: activeItem.mimeType,
-              size: activeItem.file.size
-          } : undefined,
-          content: includeContent && activeTab !== MediaType.TEXT && activeItem ? activeItem.base64 : undefined,
-          timestamp: Date.now()
-      });
+      const MAX_URL_LENGTH = 8000;
 
       const generateUrl = (payload: any) => {
-          const jsonStr = JSON.stringify(payload);
-          return `${window.location.origin}${window.location.pathname}?share=${btoa(unescape(encodeURIComponent(jsonStr)))}`;
+          try {
+            const jsonStr = JSON.stringify(payload);
+            return `${window.location.origin}${window.location.pathname}?share=${btoa(unescape(encodeURIComponent(jsonStr)))}`;
+          } catch(e) {
+            return "";
+          }
       };
 
-      try {
-          // Attempt to share WITH content first (for small images)
-          let payload = createPayload(true);
-          let url = generateUrl(payload);
+      // Configuration for degradation levels (strategies) to fit URL limits
+      const shareStrategies = [
+        // Level 1: Full Fidelity (Include content if possible)
+        { includeContent: true, textLimit: Infinity, reasoningLimit: Infinity },
+        // Level 2: No Media Content (if applicable)
+        { includeContent: false, textLimit: Infinity, reasoningLimit: Infinity },
+        // Level 3: Truncate Text Input (if Text Mode) to ~2000 chars
+        { includeContent: false, textLimit: 2000, reasoningLimit: Infinity },
+        // Level 4: Aggressive Text Truncate + Reasoning Truncate
+        { includeContent: false, textLimit: 500, reasoningLimit: 500 }
+      ];
+
+      for (const settings of shareStrategies) {
+          // If strategy requires content but we are in text mode or no active item, 
+          // essentially acts same as 'includeContent: false', but redundant.
+          // However, 'includeContent' specifically refers to base64 media content.
           
-          // If URL is too large, fallback to metadata only
-          if (url.length > 8000) {
-              payload = createPayload(false);
-              url = generateUrl(payload);
-              
-              // If still too large (extreme edge case with huge metadata), abort
-              if (url.length > 8000) {
-                  addToast("Result too large to share via URL", 'error');
-                  return;
-              }
+          // Prepare Text (for Text Mode or fallback)
+          let textToShare = activeTab === MediaType.TEXT ? textInput : undefined;
+          if (textToShare && textToShare.length > settings.textLimit) {
+              textToShare = textToShare.substring(0, settings.textLimit) + "\n... [Truncated for Share]";
           }
 
-          setShareUrl(url);
-          setIsShareOpen(true);
-      } catch (e) {
-          addToast("Failed to generate share link", 'error');
+          // Prepare Reasoning (Truncate if needed)
+          let reasoningToShare = result.reasoning;
+          if (reasoningToShare.length > settings.reasoningLimit) {
+              reasoningToShare = reasoningToShare.substring(0, settings.reasoningLimit) + "... [Truncated]";
+          }
+          
+          const payload = {
+              v: 2,
+              type: activeTab,
+              result: { ...result, reasoning: reasoningToShare },
+              config: {
+                  preset: analysisPreset,
+                  focus: analysisFocus,
+                  advanced: advancedConfig
+              },
+              text: textToShare,
+              meta: activeTab !== MediaType.TEXT && activeItem ? {
+                  name: activeItem.file.name,
+                  mime: activeItem.mimeType,
+                  size: activeItem.file.size
+              } : undefined,
+              // Only include content if strategy says so, and it exists
+              content: settings.includeContent && activeTab !== MediaType.TEXT && activeItem ? activeItem.base64 : undefined,
+              timestamp: Date.now()
+          };
+
+          const url = generateUrl(payload);
+          
+          // Check if URL was generated successfully and fits limits
+          if (url && url.length <= MAX_URL_LENGTH) {
+              setShareUrl(url);
+              setIsShareOpen(true);
+              return;
+          }
       }
+      
+      // If all strategies fail
+      addToast("Result too large to share via URL", 'error');
   };
 
   const copyShareUrl = async () => {
@@ -632,15 +695,22 @@ function App() {
 
     files.forEach(file => {
         let isValid = true;
+        const inferredMime = getMimeType(file);
         
         if (file.size > MAX_FILE_SIZE) {
             isValid = false;
             if (!errorDetails) errorDetails = 'File size > 100MB';
         }
 
-        if (isValid && !config.mime.includes(file.type)) {
-             isValid = false;
-             if (!errorDetails) errorDetails = 'Invalid format';
+        if (isValid && !config.mime.includes(inferredMime)) {
+             // Second check: sometimes mapped type is slightly different (e.g. audio/x-m4a vs audio/mp4)
+             // If the file.type itself is valid but getMimeType returned something else, double check file.type
+             if (file.type && config.mime.includes(file.type)) {
+                 // It's valid per browser type
+             } else {
+                 isValid = false;
+                 if (!errorDetails) errorDetails = 'Invalid format';
+             }
         }
 
         if (isValid) {
@@ -661,7 +731,7 @@ function App() {
       file: f,
       status: 'uploading',
       progress: 0,
-      mimeType: f.type
+      mimeType: getMimeType(f) // Use robust detection
     }));
 
     setQueue(prev => {
@@ -877,8 +947,9 @@ function App() {
           }
 
       } catch (e: any) {
-          updateQueueItem(item.id, { status: 'error', error: e.message || 'Progressive analysis failed' });
-          addToast('Progressive analysis failed', 'error');
+          const errMsg = e.message || 'Progressive analysis failed';
+          updateQueueItem(item.id, { status: 'error', error: errMsg });
+          addToast(errMsg, 'error');
       } finally {
           // Cleanup
           video.removeAttribute('src'); 
@@ -921,11 +992,12 @@ function App() {
       addToast('Analysis complete', 'success');
 
     } catch (err: any) {
+      const errMsg = err.message || "Analysis failed";
       updateQueueItem(activeItem.id, { 
         status: 'error', 
-        error: err.message || "Analysis failed" 
+        error: errMsg
       });
-      addToast(err.message || "Analysis failed", 'error');
+      addToast(errMsg, 'error');
     }
   };
 
@@ -1031,7 +1103,7 @@ function App() {
             </div>
             <div>
               <h1 className="text-xl md:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 via-indigo-600 to-slate-600 dark:from-white dark:via-indigo-100 dark:to-slate-400 tracking-tight">
-                Veritas AI Detector
+                Veritas
               </h1>
               <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400 font-medium hidden sm:block">Deterministic Multimodal Content Analysis</p>
             </div>
@@ -1052,11 +1124,12 @@ function App() {
                 </button>
 
                 <button 
-                onClick={toggleTheme}
+                onClick={cycleTheme}
                 className="p-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all border border-transparent hover:border-slate-300 dark:hover:border-slate-700"
                 aria-label="Toggle theme"
+                title={`Theme: ${theme.charAt(0).toUpperCase() + theme.slice(1)}`}
                 >
-                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                {theme === 'dark' ? <Moon className="w-4 h-4" /> : theme === 'light' ? <Sun className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
                 </button>
 
                 <button 
@@ -1551,11 +1624,7 @@ function App() {
                                                 {activeTab === MediaType.IMAGE && (
                                                     activeItem.mimeType === 'application/pdf' ? (
                                                         <div className="w-full h-full border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white" key={activeItem.id}>
-                                                            <iframe 
-                                                                src={`${activeItem.previewUrl}#toolbar=0`} 
-                                                                className="w-full h-full" 
-                                                                title="PDF Preview"
-                                                            />
+                                                            <PdfPreview url={activeItem.previewUrl} />
                                                         </div>
                                                     ) : (
                                                         <div className="relative w-full h-full flex items-center justify-center" key={activeItem.id}>
@@ -1863,7 +1932,7 @@ function App() {
                       <div className="flex items-center gap-2 mb-3">
                         <Activity className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                         <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold Key Identifiers">Key Identifiers</p>
-                        <InfoTooltip content="Specific patterns or artifacts detected. The percentage indicates how strongly a feature influenced the final AI probability score." />
+                        <InfoTooltip content="Distinctive characteristics identified during analysis. The percentage represents the 'Impact Score' — how strongly that specific feature influenced the final verdict." />
                       </div>
                       <ul className="space-y-3">
                         {result.keyFeatures.map((item, idx) => (
@@ -1874,22 +1943,23 @@ function App() {
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                                   item.impactScore > 70 ? 'bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/10' :
                                   item.impactScore > 40 ? 'bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/10' :
-                                  'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-600'
+                                  'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-600'
                                 }`}>
-                                  {item.impactScore}%
+                                  {item.impactScore}% Impact
                                 </span>
                               </div>
                             </div>
-                            <div className="w-full bg-slate-200 dark:bg-slate-700/50 rounded-full h-1.5 mt-1 overflow-hidden">
-                              <div 
-                                className={`h-full rounded-full transition-all duration-1000 ${
-                                   item.impactScore > 70 ? 'bg-red-500' :
-                                   item.impactScore > 40 ? 'bg-amber-500' :
-                                   'bg-slate-400 dark:bg-slate-500'
-                                }`} 
-                                style={{ width: `${item.impactScore}%` }} 
-                              />
-                            </div>
+                            {/* Visual Bar */}
+                             <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 mt-2 overflow-hidden">
+                                <div 
+                                    className={`h-full rounded-full ${
+                                        item.impactScore > 70 ? 'bg-red-500' :
+                                        item.impactScore > 40 ? 'bg-amber-500' :
+                                        'bg-slate-400'
+                                    }`} 
+                                    style={{ width: `${item.impactScore}%` }}
+                                />
+                             </div>
                           </li>
                         ))}
                       </ul>
@@ -1898,111 +1968,67 @@ function App() {
                 </div>
               </div>
             ) : (
-              // Empty State for Right Column
-              <div className="h-full bg-slate-50 dark:bg-slate-900/30 border-2 border-slate-300 dark:border-slate-800 border-dashed rounded-3xl flex flex-col items-center justify-center p-8 text-center min-h-[400px] hover:border-slate-400 dark:hover:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-900/50 transition-all group print:hidden">
-                <div className="w-20 h-20 md:w-24 md:h-24 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-xl shadow-slate-200/50 dark:shadow-none ring-1 ring-black/5 dark:ring-white/5">
-                  <Activity className="w-8 h-8 md:w-10 md:h-10 text-slate-400 dark:text-slate-600 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" />
-                </div>
-                <h3 className="text-lg md:text-xl font-bold text-slate-800 dark:text-slate-200 mb-2">Awaiting Analysis</h3>
-                <p className="text-slate-500 max-w-xs leading-relaxed text-sm md:text-base">
-                  {activeTab === MediaType.TEXT ? 'Enter text on the left panel to begin forensic analysis.' : 'Upload media or select a file from the queue to start detection.'}
-                </p>
-              </div>
+                /* Empty State */
+               <div className="h-full flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-slate-300 dark:border-slate-800 rounded-2xl text-slate-400 dark:text-slate-600 space-y-4 min-h-[400px]">
+                   <div className="w-20 h-20 bg-slate-100 dark:bg-slate-900 rounded-full flex items-center justify-center">
+                       <Activity className="w-10 h-10 opacity-50" />
+                   </div>
+                   <div>
+                       <h3 className="text-lg font-semibold text-slate-500 dark:text-slate-500">Analysis Results</h3>
+                       <p className="text-sm max-w-xs mx-auto mt-2">Upload a file or enter text to run the forensic analysis model.</p>
+                   </div>
+               </div>
             )}
           </div>
         </div>
       </div>
       
-      {/* History Drawer */}
+      {/* Drawers and Overlays */}
+      <ChatWidget />
+      
       <HistoryDrawer 
         isOpen={isHistoryOpen} 
         onClose={() => setIsHistoryOpen(false)} 
-        history={history} 
+        history={history}
         onSelect={restoreFromHistory}
         onClear={clearHistory}
       />
 
       {/* About Modal */}
       {isAboutOpen && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 print:hidden">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsAboutOpen(false)} />
-            <div className="relative bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                        <CheckCircle2 className="w-6 h-6 text-white" />
-                        </div>
-                        <div>
-                        <h2 className="text-lg font-bold text-slate-900 dark:text-white">Veritas AI Detector</h2>
-                        <p className="text-xs font-mono text-slate-500">v1.2.0</p>
-                        </div>
-                    </div>
-                    <button onClick={() => setIsAboutOpen(false)} className="text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">
+        <>
+            <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm z-[100]" onClick={() => setIsAboutOpen(false)} />
+            <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-slate-900 w-[90%] max-w-lg rounded-2xl shadow-2xl z-[101] p-6 border border-slate-200 dark:border-slate-700">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <CheckCircle2 className="w-6 h-6 text-indigo-600" />
+                        About Veritas
+                    </h2>
+                    <button onClick={() => setIsAboutOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
-
-                <div className="space-y-6">
-                    <div>
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Changelog</h3>
-                        <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700">
-                        <div className="relative pl-4 border-l-2 border-indigo-500">
-                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">v1.2.0 <span className="text-[10px] font-normal text-slate-500 ml-2">Current</span></p>
-                            <ul className="mt-1 space-y-1.5">
-                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Added <span className="font-medium text-slate-700 dark:text-slate-300">Progressive Video Analysis</span> for handling large files ({'>'}18MB) via frame sampling.</li>
-                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Enhanced UI for <span className="font-medium text-slate-700 dark:text-slate-300">Mixed/Uncertain</span> results with dedicated styling and tooltips.</li>
-                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Improved accuracy of the configuration 'Modified' indicator.</li>
-                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• UI/UX polish and performance optimizations.</li>
-                            </ul>
-                        </div>
-                        <div className="relative pl-4 border-l-2 border-slate-200 dark:border-slate-800">
-                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">v1.1.0</p>
-                            <ul className="mt-1 space-y-1.5">
-                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Initial public release.</li>
-                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Multimodal support: Text, Image, Audio, Video.</li>
-                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Powered by Gemini 3 Pro model.</li>
-                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Local history persistence and JSON export.</li>
-                            </ul>
-                        </div>
-                        </div>
-                    </div>
-                    
-                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
-                        <p className="text-[10px] text-slate-500 leading-relaxed text-center">
-                        Veritas uses advanced LLMs to analyze patterns. Results are probabilistic estimates, not absolute facts. Always verify important content with multiple sources.
-                        </p>
+                <div className="space-y-4 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                    <p>
+                        <strong>Veritas</strong> is a deterministic multimodal content analysis tool designed to identify AI-generated artifacts in Text, Images, Audio, and Video.
+                    </p>
+                    <p>
+                        Powered by <strong>Google Gemini 3 Pro</strong>, it uses advanced reasoning to provide forensic breakdowns of media authenticity.
+                    </p>
+                    <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-xl">
+                        <h4 className="font-semibold text-slate-900 dark:text-white mb-2 text-xs uppercase tracking-wider">Version 2.1 Changelog</h4>
+                        <ul className="list-disc list-inside space-y-1 text-xs">
+                            <li>Added <strong>Progressive Video Analysis</strong> for large files.</li>
+                            <li>Integrated <strong>History Drawer</strong> with local persistence.</li>
+                            <li>New <strong>Heatmap & Radar Visualization</strong> for features.</li>
+                            <li>Support for PDF document analysis (Beta).</li>
+                        </ul>
                     </div>
                 </div>
             </div>
-            </div>
-        </div>
+        </>
       )}
 
-      {/* Image Lightbox Modal */}
-      {isSourceOpen && activeItem?.previewUrl && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 p-4 print:hidden backdrop-blur-md animate-in fade-in duration-200" onClick={() => setIsSourceOpen(false)}>
-            <div className="relative w-full h-full flex items-center justify-center">
-                <img 
-                    src={activeItem.previewUrl} 
-                    alt="Full Source" 
-                    className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-300"
-                    onClick={(e) => e.stopPropagation()} 
-                />
-                <button 
-                    onClick={() => setIsSourceOpen(false)}
-                    className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white p-3 rounded-full transition-all backdrop-blur-sm border border-white/10 pointer-events-auto"
-                >
-                    <X className="w-6 h-6" />
-                </button>
-            </div>
-        </div>
-      )}
-
-      {/* Chat Widget Overlay */}
-      <div className="print:hidden">
-        <ChatWidget />
-      </div>
     </div>
   );
 }

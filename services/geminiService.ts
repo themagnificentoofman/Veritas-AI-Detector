@@ -118,7 +118,16 @@ export const detectAIContent = async (
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
-        systemInstruction: `You are a forensic AI content detector. Your goal is to provide a scientifically grounded assessment of media authenticity. ${presetInstruction}`,
+        tools: [{ googleSearch: {} }],
+        systemInstruction: `You are a forensic AI content detector. Your goal is to provide a scientifically grounded assessment of media authenticity.
+        
+GLOBAL CONTEXT & SEARCH MANDATE:
+- The current operating context is Late 2025.
+- You have access to Google Search. You MUST use it to verify the existence of specific entities, identifiers (e.g., 'Codeforces 2035E', software versions, recent news), and facts before making a judgment.
+- If a text refers to a specific problem, article, or event that you do not recognize from your training data, SEARCH for it. Do not assume it is a hallucination or nonexistent based on cutoff dates.
+- Treat "present-day" as Late 2025.
+
+${presetInstruction}`,
         temperature: config.advanced.temperature,
         topP: config.advanced.topP,
         topK: config.advanced.topK
@@ -128,9 +137,10 @@ export const detectAIContent = async (
     const resultText = response.text || "{}";
     return JSON.parse(cleanJsonString(resultText)) as AnalysisResult;
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Analysis Failed", error);
-    throw new Error("Failed to analyze content. Please try again.");
+    // Propagate the actual error message so the UI can show "Payload too large" or "Invalid MIME type"
+    throw new Error(error.message || "Failed to analyze content. Please try again.");
   }
 };
 
@@ -142,8 +152,9 @@ export const streamChatMessage = async function* (
     model: 'gemini-3-pro-preview',
     history: history,
     config: {
+      tools: [{ googleSearch: {} }],
       temperature: 0.7,
-      systemInstruction: "You are Veritas, a helpful AI assistant integrated into a content detection app. You help users understand AI technology, deepfakes, and content verification."
+      systemInstruction: "You are Veritas, a helpful AI assistant integrated into a content detection app. You help users understand AI technology, deepfakes, and content verification. You have access to Google Search. The current operational context is Late 2025. Use search to verify specific claims or identifiers provided by the user."
     }
   });
 

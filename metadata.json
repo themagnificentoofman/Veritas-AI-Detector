@@ -1,5 +1,5 @@
 {
-  "name": "Veritas AI Detector",
+  "name": "Veritas",
   "description": "A professional-grade multimodal AI content detection and analysis platform. Upload text, images, audio, or video to detect AI-generated patterns with deterministic probability scoring.",
   "requestFramePermissions": [
     "microphone",
