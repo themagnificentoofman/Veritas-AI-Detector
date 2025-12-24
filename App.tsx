@@ -228,6 +228,23 @@ function App() {
               if (mode === MediaType.TEXT && data.text) {
                   setTextInput(data.text);
               } else if (data.meta) {
+                  // Attempt to restore preview from content if available
+                  let previewUrl: string | undefined = undefined;
+                  if (data.content && data.meta.mime) {
+                      try {
+                           const byteCharacters = atob(data.content);
+                           const byteNumbers = new Array(byteCharacters.length);
+                           for (let i = 0; i < byteCharacters.length; i++) {
+                               byteNumbers[i] = byteCharacters.charCodeAt(i);
+                           }
+                           const byteArray = new Uint8Array(byteNumbers);
+                           const blob = new Blob([byteArray], { type: data.meta.mime });
+                           previewUrl = URL.createObjectURL(blob);
+                      } catch (e) {
+                          console.error("Failed to restore preview content", e);
+                      }
+                  }
+
                   // Restore Ghost Item for Media
                    const dummyFile = new File([""], data.meta.name || "Shared File", { type: data.meta.mime || 'application/octet-stream' });
                    const ghostItem: QueueItem = {
@@ -236,8 +253,8 @@ function App() {
                       status: 'done',
                       progress: 100,
                       mimeType: data.meta.mime || 'unknown',
-                      base64: undefined,
-                      previewUrl: undefined,
+                      base64: data.content,
+                      previewUrl: previewUrl,
                       result: resultData
                    };
                    setQueue([ghostItem]);
@@ -333,7 +350,8 @@ function App() {
   const handleShare = () => {
       if (!result) return;
       
-      const shareData = {
+      // Helper to create share payload
+      const createPayload = (includeContent: boolean) => ({
           v: 2,
           type: activeTab,
           result: result,
@@ -348,18 +366,30 @@ function App() {
               mime: activeItem.mimeType,
               size: activeItem.file.size
           } : undefined,
+          content: includeContent && activeTab !== MediaType.TEXT && activeItem ? activeItem.base64 : undefined,
           timestamp: Date.now()
+      });
+
+      const generateUrl = (payload: any) => {
+          const jsonStr = JSON.stringify(payload);
+          return `${window.location.origin}${window.location.pathname}?share=${btoa(unescape(encodeURIComponent(jsonStr)))}`;
       };
-      
+
       try {
-          // Use btoa with utf8 escape fix
-          const jsonStr = JSON.stringify(shareData);
-          const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
-          const url = `${window.location.origin}${window.location.pathname}?share=${base64}`;
+          // Attempt to share WITH content first (for small images)
+          let payload = createPayload(true);
+          let url = generateUrl(payload);
           
+          // If URL is too large, fallback to metadata only
           if (url.length > 8000) {
-              addToast("Result too large to share via URL", 'error');
-              return;
+              payload = createPayload(false);
+              url = generateUrl(payload);
+              
+              // If still too large (extreme edge case with huge metadata), abort
+              if (url.length > 8000) {
+                  addToast("Result too large to share via URL", 'error');
+                  return;
+              }
           }
 
           setShareUrl(url);
