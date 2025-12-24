@@ -1624,7 +1624,7 @@ function App() {
                                                 {activeTab === MediaType.IMAGE && (
                                                     activeItem.mimeType === 'application/pdf' ? (
                                                         <div className="w-full h-full border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white" key={activeItem.id}>
-                                                            <PdfPreview url={activeItem.previewUrl} />
+                                                             <PdfPreview url={activeItem.previewUrl} />
                                                         </div>
                                                     ) : (
                                                         <div className="relative w-full h-full flex items-center justify-center" key={activeItem.id}>
@@ -1943,23 +1943,22 @@ function App() {
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                                   item.impactScore > 70 ? 'bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/10' :
                                   item.impactScore > 40 ? 'bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/10' :
-                                  'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-600'
+                                  'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-600'
                                 }`}>
-                                  {item.impactScore}% Impact
+                                  {item.impactScore}%
                                 </span>
                               </div>
                             </div>
-                            {/* Visual Bar */}
-                             <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 mt-2 overflow-hidden">
-                                <div 
-                                    className={`h-full rounded-full ${
-                                        item.impactScore > 70 ? 'bg-red-500' :
-                                        item.impactScore > 40 ? 'bg-amber-500' :
-                                        'bg-slate-400'
-                                    }`} 
-                                    style={{ width: `${item.impactScore}%` }}
-                                />
-                             </div>
+                            <div className="w-full bg-slate-200 dark:bg-slate-700/50 rounded-full h-1.5 mt-1 overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full transition-all duration-1000 ${
+                                   item.impactScore > 70 ? 'bg-red-500' :
+                                   item.impactScore > 40 ? 'bg-amber-500' :
+                                   'bg-slate-400 dark:bg-slate-500'
+                                }`} 
+                                style={{ width: `${item.impactScore}%` }} 
+                              />
+                            </div>
                           </li>
                         ))}
                       </ul>
@@ -1968,67 +1967,111 @@ function App() {
                 </div>
               </div>
             ) : (
-                /* Empty State */
-               <div className="h-full flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-slate-300 dark:border-slate-800 rounded-2xl text-slate-400 dark:text-slate-600 space-y-4 min-h-[400px]">
-                   <div className="w-20 h-20 bg-slate-100 dark:bg-slate-900 rounded-full flex items-center justify-center">
-                       <Activity className="w-10 h-10 opacity-50" />
-                   </div>
-                   <div>
-                       <h3 className="text-lg font-semibold text-slate-500 dark:text-slate-500">Analysis Results</h3>
-                       <p className="text-sm max-w-xs mx-auto mt-2">Upload a file or enter text to run the forensic analysis model.</p>
-                   </div>
-               </div>
+              // Empty State for Right Column
+              <div className="h-full bg-slate-50 dark:bg-slate-900/30 border-2 border-slate-300 dark:border-slate-800 border-dashed rounded-3xl flex flex-col items-center justify-center p-8 text-center min-h-[400px] hover:border-slate-400 dark:hover:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-900/50 transition-all group print:hidden">
+                <div className="w-20 h-20 md:w-24 md:h-24 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-xl shadow-slate-200/50 dark:shadow-none ring-1 ring-black/5 dark:ring-white/5">
+                  <Activity className="w-8 h-8 md:w-10 md:h-10 text-slate-400 dark:text-slate-600 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" />
+                </div>
+                <h3 className="text-lg md:text-xl font-bold text-slate-800 dark:text-slate-200 mb-2">Awaiting Analysis</h3>
+                <p className="text-slate-500 max-w-xs leading-relaxed text-sm md:text-base">
+                  {activeTab === MediaType.TEXT ? 'Enter text on the left panel to begin forensic analysis.' : 'Upload media or select a file from the queue to start detection.'}
+                </p>
+              </div>
             )}
           </div>
         </div>
       </div>
       
-      {/* Drawers and Overlays */}
-      <ChatWidget />
-      
+      {/* History Drawer */}
       <HistoryDrawer 
         isOpen={isHistoryOpen} 
         onClose={() => setIsHistoryOpen(false)} 
-        history={history}
+        history={history} 
         onSelect={restoreFromHistory}
         onClear={clearHistory}
       />
 
       {/* About Modal */}
       {isAboutOpen && (
-        <>
-            <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm z-[100]" onClick={() => setIsAboutOpen(false)} />
-            <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-slate-900 w-[90%] max-w-lg rounded-2xl shadow-2xl z-[101] p-6 border border-slate-200 dark:border-slate-700">
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <CheckCircle2 className="w-6 h-6 text-indigo-600" />
-                        About Veritas
-                    </h2>
-                    <button onClick={() => setIsAboutOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 print:hidden">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsAboutOpen(false)} />
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                        <CheckCircle2 className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                        <h2 className="text-lg font-bold text-slate-900 dark:text-white">Veritas</h2>
+                        <p className="text-xs font-mono text-slate-500">v1.2.0</p>
+                        </div>
+                    </div>
+                    <button onClick={() => setIsAboutOpen(false)} className="text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
-                <div className="space-y-4 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                    <p>
-                        <strong>Veritas</strong> is a deterministic multimodal content analysis tool designed to identify AI-generated artifacts in Text, Images, Audio, and Video.
-                    </p>
-                    <p>
-                        Powered by <strong>Google Gemini 3 Pro</strong>, it uses advanced reasoning to provide forensic breakdowns of media authenticity.
-                    </p>
-                    <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-xl">
-                        <h4 className="font-semibold text-slate-900 dark:text-white mb-2 text-xs uppercase tracking-wider">Version 2.1 Changelog</h4>
-                        <ul className="list-disc list-inside space-y-1 text-xs">
-                            <li>Added <strong>Progressive Video Analysis</strong> for large files.</li>
-                            <li>Integrated <strong>History Drawer</strong> with local persistence.</li>
-                            <li>New <strong>Heatmap & Radar Visualization</strong> for features.</li>
-                            <li>Support for PDF document analysis (Beta).</li>
-                        </ul>
+
+                <div className="space-y-6">
+                    <div>
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Changelog</h3>
+                        <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700">
+                        <div className="relative pl-4 border-l-2 border-indigo-500">
+                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">v1.2.0 <span className="text-[10px] font-normal text-slate-500 ml-2">Current</span></p>
+                            <ul className="mt-1 space-y-1.5">
+                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Added <span className="font-medium text-slate-700 dark:text-slate-300">Progressive Video Analysis</span> for handling large files ({'>'}18MB) via frame sampling.</li>
+                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Enhanced UI for <span className="font-medium text-slate-700 dark:text-slate-300">Mixed/Uncertain</span> results with dedicated styling and tooltips.</li>
+                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Improved accuracy of the configuration 'Modified' indicator.</li>
+                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• UI/UX polish and performance optimizations.</li>
+                            </ul>
+                        </div>
+                        <div className="relative pl-4 border-l-2 border-slate-200 dark:border-slate-800">
+                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">v1.1.0</p>
+                            <ul className="mt-1 space-y-1.5">
+                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Initial public release.</li>
+                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Multimodal support: Text, Image, Audio, Video.</li>
+                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Powered by Gemini 3 Pro model.</li>
+                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Local history persistence and JSON export.</li>
+                            </ul>
+                        </div>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                        <p className="text-[10px] text-slate-500 leading-relaxed text-center">
+                        Veritas uses advanced LLMs to analyze patterns. Results are probabilistic estimates, not absolute facts. Always verify important content with multiple sources.
+                        </p>
                     </div>
                 </div>
             </div>
-        </>
+            </div>
+        </div>
       )}
 
+      {/* Image Lightbox Modal */}
+      {isSourceOpen && activeItem?.previewUrl && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 p-4 print:hidden backdrop-blur-md animate-in fade-in duration-200" onClick={() => setIsSourceOpen(false)}>
+            <div className="relative w-full h-full flex items-center justify-center">
+                <img 
+                    src={activeItem.previewUrl} 
+                    alt="Full Source" 
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-300"
+                    onClick={(e) => e.stopPropagation()} 
+                />
+                <button 
+                    onClick={() => setIsSourceOpen(false)}
+                    className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white p-3 rounded-full transition-all backdrop-blur-md border border-white/10 pointer-events-auto"
+                >
+                    <X className="w-6 h-6" />
+                </button>
+            </div>
+        </div>
+      )}
+
+      {/* Chat Widget Overlay */}
+      <div className="print:hidden">
+        <ChatWidget />
+      </div>
     </div>
   );
 }

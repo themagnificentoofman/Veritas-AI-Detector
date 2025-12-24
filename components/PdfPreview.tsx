@@ -3,8 +3,6 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2, RefreshCw } from 'lucide-react';
 
 // Configure the worker - using the same version as the main library
-// Note: In a real bundler setup, you'd import the worker file. 
-// With esm.sh, we point to the CDN worker.
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://esm.sh/pdfjs-dist@4.8.69/build/pdf.worker.min.mjs';
 
 interface PdfPreviewProps {
@@ -67,7 +65,7 @@ const PdfPreview: React.FC<PdfPreviewProps> = ({ url }) => {
   // Render Page
   useEffect(() => {
     const renderPage = async () => {
-      if (!pdfDoc || !canvasRef.current || !containerRef.current) return;
+      if (!pdfDoc || !canvasRef.current) return;
 
       setRendering(true);
       
@@ -78,12 +76,6 @@ const PdfPreview: React.FC<PdfPreviewProps> = ({ url }) => {
         }
 
         const page = await pdfDoc.getPage(pageNum);
-        
-        // Calculate scale to fit width if initial load (optional logic, keeping simpler manual zoom for now or 1.0 base)
-        // But for better UX, let's try to fit width initially if we haven't set a manual scale preference?
-        // Actually, let's stick to 'scale' state which defaults to 1.0 but maybe we want "fit width" logic.
-        // Let's implement a dynamic "fit" calculation based on container width.
-        
         const viewport = page.getViewport({ scale: scale });
         const canvas = canvasRef.current;
         const context = canvas.getContext('2d');
@@ -125,7 +117,8 @@ const PdfPreview: React.FC<PdfPreviewProps> = ({ url }) => {
     renderPage();
   }, [pdfDoc, pageNum, scale]);
 
-  // Initial fit width
+  // Initial fit width logic could be added, but simple 1.0 default is safe.
+  // We can attempt to auto-fit width if it's the first load
   useEffect(() => {
     if (!pdfDoc || !containerRef.current || numPages === 0) return;
     
@@ -142,9 +135,25 @@ const PdfPreview: React.FC<PdfPreviewProps> = ({ url }) => {
     }
   }, [pdfDoc, containerRef.current?.clientWidth]);
 
-
   const changePage = (offset: number) => {
     setPageNum(prev => Math.min(Math.max(1, prev + offset), numPages));
+  };
+  
+  const handlePageInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = parseInt(e.target.value);
+      if (!isNaN(val)) {
+          // Allow typing, clamp on blur or enter
+      }
+  };
+
+  const handlePageKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+          const val = parseInt(e.currentTarget.value);
+          if (!isNaN(val)) {
+              setPageNum(Math.min(Math.max(1, val), numPages));
+          }
+          e.currentTarget.blur();
+      }
   };
 
   const changeZoom = (delta: number) => {
@@ -165,8 +174,8 @@ const PdfPreview: React.FC<PdfPreviewProps> = ({ url }) => {
       <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-900 text-red-500 p-4 text-center">
         <p className="text-sm font-medium mb-2">{error}</p>
         <button 
-            onClick={() => window.location.reload()} // Simple reload attempt or could retry state
-            className="text-xs flex items-center gap-1 bg-white dark:bg-slate-800 px-3 py-1.5 rounded border border-slate-200 dark:border-slate-700"
+            onClick={() => window.location.reload()}
+            className="text-xs flex items-center gap-1 bg-white dark:bg-slate-800 px-3 py-1.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-50"
         >
             <RefreshCw className="w-3 h-3" /> Retry
         </button>
@@ -177,10 +186,10 @@ const PdfPreview: React.FC<PdfPreviewProps> = ({ url }) => {
   return (
     <div className="flex flex-col h-full bg-slate-100 dark:bg-slate-900 rounded-lg overflow-hidden relative group">
       
-      {/* Scrollable Container */}
+      {/* Scrollable Container for Panning */}
       <div 
         ref={containerRef}
-        className="flex-1 overflow-auto flex items-center justify-center p-4 relative scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700"
+        className="flex-1 overflow-auto flex items-center justify-center p-4 relative scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 bg-slate-200/50 dark:bg-slate-950/50"
       >
         <canvas ref={canvasRef} className="shadow-lg bg-white" />
         {rendering && (
@@ -191,33 +200,49 @@ const PdfPreview: React.FC<PdfPreviewProps> = ({ url }) => {
       </div>
 
       {/* Controls Bar */}
-      <div className="h-14 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between px-4 shrink-0 z-20">
+      <div className="h-14 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between px-4 shrink-0 z-20 shadow-sm">
         
         {/* Page Nav */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3">
           <button 
             onClick={() => changePage(-1)} 
             disabled={pageNum <= 1 || rendering}
             className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            title="Previous Page"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
           
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-200 min-w-[60px] text-center">
-            {pageNum} / {numPages}
-          </span>
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+             <span className="hidden xs:inline text-slate-500 dark:text-slate-400">Page</span>
+             <input 
+                type="number"
+                min={1}
+                max={numPages}
+                defaultValue={pageNum}
+                key={pageNum} // Force re-render on page change to update default value
+                onKeyDown={handlePageKeyDown}
+                onBlur={(e) => {
+                    const val = parseInt(e.target.value);
+                    if (!isNaN(val)) setPageNum(Math.min(Math.max(1, val), numPages));
+                }}
+                className="w-12 h-8 text-center bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+             />
+             <span className="text-slate-500 dark:text-slate-400">of {numPages}</span>
+          </div>
           
           <button 
             onClick={() => changePage(1)} 
             disabled={pageNum >= numPages || rendering}
             className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            title="Next Page"
           >
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
 
         {/* Zoom Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 md:gap-2">
           <button 
             onClick={() => changeZoom(-0.1)}
             disabled={rendering}
@@ -227,7 +252,7 @@ const PdfPreview: React.FC<PdfPreviewProps> = ({ url }) => {
             <ZoomOut className="w-4 h-4" />
           </button>
           
-          <span className="text-xs font-mono text-slate-500 dark:text-slate-400 w-12 text-center">
+          <span className="text-xs font-mono text-slate-500 dark:text-slate-400 w-10 text-center hidden sm:block">
             {Math.round(scale * 100)}%
           </span>
           
