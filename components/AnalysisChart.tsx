@@ -118,7 +118,7 @@ const AnalysisChart: React.FC<AnalysisChartProps> = ({ result }) => {
                 <RechartsTooltip 
                 contentStyle={{ backgroundColor: 'var(--tooltip-bg, #0f172a)', borderColor: 'var(--tooltip-border, #334155)', color: 'var(--tooltip-text, #f8fafc)', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)' }}
                 itemStyle={{ color: '#818cf8', fontWeight: 500 }}
-                formatter={(value: number) => [`${value}%`, 'Impact']}
+                formatter={(value) => [`${value}%`, 'Impact']}
                 labelStyle={{ color: '#cbd5e1' }}
                 />
             </RadarChart>

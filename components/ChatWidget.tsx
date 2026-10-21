@@ -68,11 +68,10 @@ const ChatWidget: React.FC = () => {
       }
 
     } catch (error) {
-      console.error("Chat Error", error);
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: 'model',
-        text: "Sorry, I encountered an error. Please try again.",
+        text: error instanceof Error ? error.message : "Sorry, I encountered an error. Please try again.",
         timestamp: new Date(),
         isError: true
       }]);

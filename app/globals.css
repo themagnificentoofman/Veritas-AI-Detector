@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+      body {
+        font-family: 'Inter', sans-serif;
+      }
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1; 
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8; 
+      }
+      .dark ::-webkit-scrollbar-track {
+        background: transparent; 
+      }
+      .dark ::-webkit-scrollbar-thumb {
+        background: #334155; 
+      }
+
+      /* Print specific overrides for PDF Export */
+      @media print {
+        @page {
+          margin: 1.5cm;
+          size: auto;
+        }
+        
+        body {
+          background-color: white !important;
+          color: black !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+
+        #root {
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+
+        .print\:hidden {
+          display: none !important;
+        }
+
+        .print\:block {
+          display: block !important;
+        }
+
+        .print\:w-full {
+          width: 100% !important;
+          max-width: 100% !important;
+          flex: none !important;
+        }
+
+        .print\:shadow-none {
+          box-shadow: none !important;
+        }
+
+        .print\:border-none {
+          border: none !important;
+        }
+        
+        /* Ensure charts print nicely */
+        .recharts-responsive-container {
+          width: 100% !important;
+        }
+      }
+    

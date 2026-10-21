@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2, RefreshCw } from 'lucide-react';
 
 // Configure the worker - using the same version as the main library
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://esm.sh/pdfjs-dist@4.8.69/build/pdf.worker.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 interface PdfPreviewProps {
   url: string;
