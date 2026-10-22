@@ -11,7 +11,7 @@ import PdfPreview from './components/PdfPreview';
 
 // Support up to 100MB videos via progressive frame sampling
 const MAX_FILE_SIZE = 100 * 1024 * 1024; 
-const SAFE_INLINE_LIMIT = 18 * 1024 * 1024; // ~18MB safe limit for direct base64 injection
+const SAFE_INLINE_LIMIT = 8 * 1024 * 1024; // Bounded inline payload; larger videos use frame sampling
 
 // Configuration for supported file types per media mode
 const FILE_CONFIG: Record<string, { mime: string[]; label: string }> = {
@@ -697,6 +697,11 @@ function App() {
         let isValid = true;
         const inferredMime = getMimeType(file);
         
+        if (activeTab !== MediaType.VIDEO && file.size > SAFE_INLINE_LIMIT) {
+            rejectedCount++;
+            if (!errorDetails) errorDetails = 'Images, PDFs and audio must be 8 MB or smaller';
+            return;
+        }
         if (file.size > MAX_FILE_SIZE) {
             isValid = false;
             if (!errorDetails) errorDetails = 'File size > 100MB';
@@ -1111,7 +1116,7 @@ function App() {
           
           <div className="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto">
             <span className="text-slate-600 dark:text-slate-500 text-xs font-medium mr-auto md:mr-0 md:hidden lg:block">
-              Powered by Gemini 3 Pro
+              Powered by Gemini
             </span>
             
             <div className="flex items-center gap-2">
@@ -1513,7 +1518,7 @@ function App() {
                           <p className="text-slate-700 dark:text-slate-200 font-semibold text-base md:text-lg">Click to upload {activeTab.toLowerCase()}s</p>
                           <p className="text-slate-500 text-sm mt-1.5">Drag, drop, or paste from clipboard</p>
                           <p className="text-slate-400 dark:text-slate-500 text-xs mt-1">Supported formats: {FILE_CONFIG[activeTab]?.label}</p>
-                          <p className="text-slate-500 dark:text-slate-600 text-xs mt-3 bg-slate-100 dark:bg-slate-800/50 inline-block px-3 py-1 rounded-full">Max 100MB per file</p>
+                          <p className="text-slate-500 dark:text-slate-600 text-xs mt-3 bg-slate-100 dark:bg-slate-800/50 inline-block px-3 py-1 rounded-full">Max {activeTab === MediaType.VIDEO ? '100 MB' : '8 MB'} per file</p>
                         </div>
                     </div>
                   ) : (
@@ -2030,7 +2035,7 @@ function App() {
                             <ul className="mt-1 space-y-1.5">
                                 <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Initial public release.</li>
                                 <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Multimodal support: Text, Image, Audio, Video.</li>
-                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Powered by Gemini 3 Pro model.</li>
+                                <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Powered by Gemini.</li>
                                 <li className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">• Local history persistence and JSON export.</li>
                             </ul>
                         </div>
